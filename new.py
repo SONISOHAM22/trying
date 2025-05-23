@@ -117,34 +117,42 @@ class JobTracker:
         """Initialize Gemini and Google Sheets from Streamlit secrets"""
         try:
             # Setup Gemini
-            gemini_api_key = st.secrets.get("GEMINI_API_KEY")
-            if gemini_api_key:
-                genai.configure(api_key=gemini_api_key)
-                self.gemini_configured = True
-                st.session_state.config_status['gemini'] = True
-            else:
-                st.error("GEMINI_API_KEY not found in Streamlit secrets")
+            try:
+                gemini_api_key = st.secrets["secrets"]["GEMINI_API_KEY"]
+                if gemini_api_key:
+                    genai.configure(api_key=gemini_api_key)
+                    self.gemini_configured = True
+                    st.session_state.config_status['gemini'] = True
+                else:
+                    st.error("GEMINI_API_KEY not found in secrets")
+            except KeyError:
+                st.error("GEMINI_API_KEY not found in Streamlit secrets. Please add it to your app secrets.")
             
             # Setup Google Sheets
-            google_creds_json = st.secrets.get("GOOGLE_CREDENTIALS_JSON")
-            sheet_id = st.secrets.get("GOOGLE_SHEET_ID")
-            
-            if google_creds_json and sheet_id:
-                try:
-                    credentials_dict = json.loads(google_creds_json)
-                    scope = [
-                        'https://spreadsheets.google.com/feeds',
-                        'https://www.googleapis.com/auth/drive'
-                    ]
-                    creds = Credentials.from_service_account_info(credentials_dict, scopes=scope)
-                    client = gspread.authorize(creds)
-                    self.sheet = client.open_by_key(sheet_id).sheet1
-                    self.sheets_configured = True
-                    st.session_state.config_status['sheets'] = True
-                except Exception as e:
-                    st.error(f"Google Sheets setup error: {str(e)}. Ensure GOOGLE_CREDENTIALS_JSON and GOOGLE_SHEET_ID are correct and the sheet is shared with the service account.")
-            else:
-                st.error("Missing GOOGLE_CREDENTIALS_JSON or GOOGLE_SHEET_ID in Streamlit secrets")
+            try:
+                google_creds = st.secrets["secrets"]["GOOGLE_CREDENTIALS"]
+                sheet_id = st.secrets["secrets"]["GOOGLE_SHEET_ID"]
+                
+                if google_creds and sheet_id:
+                    try:
+                        # Convert the TOML section to dictionary
+                        credentials_dict = dict(google_creds)
+                        
+                        scope = [
+                            'https://spreadsheets.google.com/feeds',
+                            'https://www.googleapis.com/auth/drive'
+                        ]
+                        creds = Credentials.from_service_account_info(credentials_dict, scopes=scope)
+                        client = gspread.authorize(creds)
+                        self.sheet = client.open_by_key(sheet_id).sheet1
+                        self.sheets_configured = True
+                        st.session_state.config_status['sheets'] = True
+                    except Exception as e:
+                        st.error(f"Google Sheets setup error: {str(e)}. Ensure GOOGLE_CREDENTIALS and GOOGLE_SHEET_ID are correct and the sheet is shared with the service account.")
+                else:
+                    st.error("Missing GOOGLE_CREDENTIALS or GOOGLE_SHEET_ID in secrets")
+            except KeyError as e:
+                st.error(f"Google Sheets credentials not found in Streamlit secrets: {str(e)}. Please add GOOGLE_CREDENTIALS and GOOGLE_SHEET_ID to your app secrets.")
             
         except Exception as e:
             st.error(f"Service setup error: {str(e)}")
@@ -212,7 +220,7 @@ Conversation history for context (last 6 messages):
     def add_to_sheet(self, details):
         """Add job application to Google Sheet"""
         if not self.sheets_configured or not self.sheet:
-            return False, "Google Sheets not configured. Please check your Streamlit secrets and sheet permissions."
+            return False, "Google Sheets not configured. Please check your secrets and sheet permissions."
         
         try:
             # Verify sheet structure
@@ -247,7 +255,7 @@ Conversation history for context (last 6 messages):
     def remove_from_sheet(self, company_name):
         """Remove all rows from Google Sheet based on company name"""
         if not self.sheets_configured or not self.sheet:
-            return False, "Google Sheets not configured. Please check your Streamlit secrets and sheet permissions."
+            return False, "Google Sheets not configured. Please check your secrets and sheet permissions."
         
         try:
             records = self.sheet.get_all_records()
@@ -272,7 +280,7 @@ Conversation history for context (last 6 messages):
     def get_ai_response(self, prompt, conversation_history):
         """Get response from Gemini AI for general conversation"""
         if not self.gemini_configured:
-            return "I'm having trouble connecting to my AI service. Please check the GEMINI_API_KEY in your Streamlit secrets."
+            return "I'm having trouble connecting to my AI service. Please check the GEMINI_API_KEY in your secrets."
         
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
@@ -347,7 +355,7 @@ if not all(st.session_state.config_status.values()):
                 st.success("✅ Google Sheets Connected")
             else:
                 st.error("❌ Google Sheets Not Connected")
-                st.caption("Add GOOGLE_CREDENTIALS_JSON and GOOGLE_SHEET_ID to your Streamlit secrets")
+                st.caption("Add GOOGLE_CREDENTIALS and GOOGLE_SHEET_ID to your Streamlit secrets")
 
 # Chat container
 with st.container():
@@ -457,3 +465,35 @@ with st.sidebar:
 
 # Footer with instructions
 st.markdown("---")
+with st.expander("📋 How to Use & Setup"):
+    st.markdown("""
+    ### 🚀 Quick Setup for Streamlit Cloud:
+    
+    Add the following secrets to your Streamlit Cloud app:
+    
+    1. Go to your app dashboard on Streamlit Cloud
+    2. Click on "Settings" → "Secrets"
+    3. Add the secrets as shown in the configuration file
+    
+    ### 📊 Google Sheet Setup:
+    1. Create a Google Sheet with columns: `Company Name`, `Role`, `Date`, `Platform`, `Accept`
+    2. Create a Service Account in Google Cloud Console
+    3. Enable Google Sheets API and Google Drive API
+    4. Share your sheet with the service account email
+    
+    ### 💬 How to Chat:
+    Tell me about your job applications in any natural way:
+    - "I applied for a Software Engineer role at Google yesterday via LinkedIn"
+    - "Submitted an application to Microsoft for Data Scientist on 23-05-2025"
+    - "Got an interview with Apple for Product Manager!"
+    - To remove an application: "remove Google row"
+    
+    ### 🎯 Features:
+    - ✅ Intelligent job application tracking using AI
+    - ✅ Remove all applications by company name
+    - ✅ Natural language processing
+    - ✅ Google Sheets integration
+    - ✅ Duplicate prevention
+    - ✅ Conversational AI support
+    - ✅ Reset chat history
+    """)
