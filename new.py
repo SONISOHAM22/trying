@@ -4,13 +4,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 import re
-import os
 from datetime import datetime
 import pandas as pd
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 # Page configuration
 st.set_page_config(
@@ -119,20 +114,20 @@ class JobTracker:
         self.setup_services()
     
     def setup_services(self):
-        """Initialize Gemini and Google Sheets from environment variables"""
+        """Initialize Gemini and Google Sheets from Streamlit secrets"""
         try:
             # Setup Gemini
-            gemini_api_key = os.getenv('GEMINI_API_KEY')
+            gemini_api_key = st.secrets.get("GEMINI_API_KEY")
             if gemini_api_key:
                 genai.configure(api_key=gemini_api_key)
                 self.gemini_configured = True
                 st.session_state.config_status['gemini'] = True
             else:
-                st.error("GEMINI_API_KEY not found in .env file")
+                st.error("GEMINI_API_KEY not found in Streamlit secrets")
             
             # Setup Google Sheets
-            google_creds_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
-            sheet_id = os.getenv('GOOGLE_SHEET_ID')
+            google_creds_json = st.secrets.get("GOOGLE_CREDENTIALS_JSON")
+            sheet_id = st.secrets.get("GOOGLE_SHEET_ID")
             
             if google_creds_json and sheet_id:
                 try:
@@ -149,7 +144,7 @@ class JobTracker:
                 except Exception as e:
                     st.error(f"Google Sheets setup error: {str(e)}. Ensure GOOGLE_CREDENTIALS_JSON and GOOGLE_SHEET_ID are correct and the sheet is shared with the service account.")
             else:
-                st.error("Missing GOOGLE_CREDENTIALS_JSON or GOOGLE_SHEET_ID in .env file")
+                st.error("Missing GOOGLE_CREDENTIALS_JSON or GOOGLE_SHEET_ID in Streamlit secrets")
             
         except Exception as e:
             st.error(f"Service setup error: {str(e)}")
@@ -217,7 +212,7 @@ Conversation history for context (last 6 messages):
     def add_to_sheet(self, details):
         """Add job application to Google Sheet"""
         if not self.sheets_configured or not self.sheet:
-            return False, "Google Sheets not configured. Please check your .env file and sheet permissions."
+            return False, "Google Sheets not configured. Please check your Streamlit secrets and sheet permissions."
         
         try:
             # Verify sheet structure
@@ -252,7 +247,7 @@ Conversation history for context (last 6 messages):
     def remove_from_sheet(self, company_name):
         """Remove all rows from Google Sheet based on company name"""
         if not self.sheets_configured or not self.sheet:
-            return False, "Google Sheets not configured. Please check your .env file and sheet permissions."
+            return False, "Google Sheets not configured. Please check your Streamlit secrets and sheet permissions."
         
         try:
             records = self.sheet.get_all_records()
@@ -277,7 +272,7 @@ Conversation history for context (last 6 messages):
     def get_ai_response(self, prompt, conversation_history):
         """Get response from Gemini AI for general conversation"""
         if not self.gemini_configured:
-            return "I'm having trouble connecting to my AI service. Please check the GEMINI_API_KEY in your .env file."
+            return "I'm having trouble connecting to my AI service. Please check the GEMINI_API_KEY in your Streamlit secrets."
         
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
@@ -345,14 +340,14 @@ if not all(st.session_state.config_status.values()):
                 st.success("✅ Gemini AI Connected")
             else:
                 st.error("❌ Gemini AI Not Connected")
-                st.caption("Add GEMINI_API_KEY to your .env file")
+                st.caption("Add GEMINI_API_KEY to your Streamlit secrets")
         
         with col2:
             if st.session_state.config_status['sheets']:
                 st.success("✅ Google Sheets Connected")
             else:
                 st.error("❌ Google Sheets Not Connected")
-                st.caption("Add GOOGLE_CREDENTIALS_JSON and GOOGLE_SHEET_ID to your .env file")
+                st.caption("Add GOOGLE_CREDENTIALS_JSON and GOOGLE_SHEET_ID to your Streamlit secrets")
 
 # Chat container
 with st.container():
@@ -462,37 +457,3 @@ with st.sidebar:
 
 # Footer with instructions
 st.markdown("---")
-with st.expander("📋 How to Use & Setup"):
-    st.markdown("""
-    ### 🚀 Quick Setup:
-    
-    Create a `.env` file in your project directory with:
-    
-    ```env
-    GEMINI_API_KEY=your_gemini_api_key_here
-    GOOGLE_SHEET_ID=your_google_sheet_id_here
-    GOOGLE_CREDENTIALS_JSON={"type": "service_account", "project_id": "...", ...}
-    ```
-    
-    ### 📊 Google Sheet Setup:
-    1. Create a Google Sheet with columns: `Company Name`, `Role`, `Date`, `Platform`, `Accept`
-    2. Create a Service Account in Google Cloud Console
-    3. Enable Google Sheets API and Google Drive API
-    4. Share your sheet with the service account email
-    
-    ### 💬 How to Chat:
-    Tell me about your job applications in any natural way:
-    - "I applied for a Software Engineer role at Google yesterday via LinkedIn"
-    - "Submitted an application to Microsoft for Data Scientist on 23-05-2025"
-    - "Got an interview with Apple for Product Manager!"
-    - To remove an application: "remove Google row"
-    
-    ### 🎯 Features:
-    - ✅ Intelligent job application tracking using AI
-    - ✅ Remove all applications by company name
-    - ✅ Natural language processing
-    - ✅ Google Sheets integration
-    - ✅ Duplicate prevention
-    - ✅ Conversational AI support
-    - ✅ Reset chat history
-    """)
